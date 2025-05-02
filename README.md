@@ -1,6 +1,8 @@
-# 5×STS Test (Sit‑to‑Stand)
+# Computer Vision-Based Physical Therapy Evaluation System
 
-A cross‑platform sit‑to‑stand (5×STS) test application using MediaPipe and OpenCV (Python) or MediaPipe.js (HTML/JavaScript). It allows you to:
+A cross‑platform Physical Therapy Evaluation application using MediaPipe and OpenCV (Python) or MediaPipe.js (HTML/JavaScript). 
+
+For now, it works only for the Five Times Sit To Stand Test (5xSTS). It allows you to:
 
 * **Calibrate** a user’s seated hip angle
 * **Count** full sit‑to‑stand cycles (stand then sit) exactly 5 times
@@ -33,9 +35,13 @@ A cross‑platform sit‑to‑stand (5×STS) test application using MediaPipe an
 ## Repository Structure
 
 ```
-├── sit_to_stand.py       # Main Python script
-├── index.html            # Browser version
-└── README.md             # Project README
+/               # root
+├── README.md    # this file
+├── python/      # Python desktop version
+│   ├── sit_to_stand.py
+└── html/        # Browser version
+    ├── index.html
+    └── assets/  # optional styles or scripts
 ```
 
 ---
