@@ -80,7 +80,7 @@ pip install -r requirements.txt
 
 4. Controls:
 
-   * **C**: arm calibration (wait 2 s prep + 3 s sit)
+   * **C**: hip joint angle calibration in sitting position (wait 2 s prep + 3 s sit)
    * **S**: start countdown and begin timing at Go onset
    * **Q**: quit
 
@@ -97,7 +97,7 @@ pip install -r requirements.txt
 ### Usage
 
 * Allow camera access in the browser prompt.
-* Press **C** (or tap) to begin calibration after 2 s delay.
+* Press **C** (or tap) to begin calibration for the hip joint angle in sitting position after 2 s delay.
 * Press **S** (or tap) to trigger countdown and start test immediately at “Go.”
 
 ---
@@ -111,7 +111,7 @@ Follow these steps to administer the 5‑times sit‑to‑stand test:
    * Use a standard armless chair (seat height \~43‑46 cm) placed against a wall to prevent slipping.
    * Ask the participant to sit in the middle of the chair with feet flat on the floor, shoulder‑width apart.
    * Cross arms over chest (avoid using hands to push off).
-   * Position the camera to capture the **left side** of the body for optimal hip and knee angle measurement.
+   * Position the camera to capture the **LEFT SIDE** of the body for optimal hip and knee angle measurement.
 
 2. **Calibration**
 
