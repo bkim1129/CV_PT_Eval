@@ -33,15 +33,9 @@ A cross‑platform sit‑to‑stand (5×STS) test application using MediaPipe an
 ## Repository Structure
 
 ```
-├── python/
-│   ├── sit_to_stand.py       # Main Python script
-│   ├── list_cameras.py       # Enumerate available cameras
-│   ├── requirements.txt      # pip dependencies
-│   └── README.md             # Python version README
-├── html/
-│   ├── index.html            # Browser version
-│   └── assets/               # (optional) CSS, JS, media
-└── README.md                 # Project‑level README
+├── sit_to_stand.py       # Main Python script
+├── index.html            # Browser version
+└── README.md             # Project README
 ```
 
 ---
