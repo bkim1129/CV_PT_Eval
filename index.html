@@ -21,33 +21,22 @@
     const canvasElement = document.getElementById('output');
     const ctx = canvasElement.getContext('2d');
 
-    // Params
+    // Parameters
     const REP_GOAL = 5;
     const SMOOTH_WINDOW = 5;
     const STAND_THRESHOLD = 160;
-    const CALIB_DURATION = 3000;
-    const SIT_MARGIN = 5;
+    const CALIB_DURATION = 3000;  // ms
+    const SIT_MARGIN = 5;         // degrees
 
-    // State variables
-    let angleBuffer = [];
-    let state = null;
-    let testActive = false;
-    let repCount = 0;
-    let startTime = 0;
-    let finishPending = false;
-    let lastResult = null;
-
-    // Calibration flags
-    let calibrated = false;
-    let calibrating = false;
-    let calibrationRequested = false;
-    let calibrationRequestTime = 0;
+    // State
+    let angleBuffer = [], state = null, testActive = false, repCount = 0;
+    let startTime = 0, finishPending = false, lastResult = null;
+    let calibrated = false, calibrating = false, calibrationRequested = false;
+    let calibrationRequestTime = 0, calibrationStart = 0, sitThreshold = 0;
     let calibBuffer = [];
-    let calibrationStart = 0;
-    let sitThreshold = 0;
 
-    // Audio: simple beep
-    const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    // Audio beep
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function beep(freq, dur) {
       let o = audioCtx.createOscillator();
       o.frequency.value = freq;
@@ -56,23 +45,41 @@
       setTimeout(() => o.stop(), dur);
     }
 
+    // Countdown: draw once per cue, match display duration to audio, 500ms inter-cue pause
     async function playCountdown() {
-      const cues = [ ['Ready', 1000, 1000], ['3', 800, 400], ['2', 800, 400], ['1', 800, 400], ['Go', 1500, 400] ];
-      for (let [text, freq, dur] of cues) {
+      const cues = [
+        ['Ready', 1000, 1000],
+        ['3',     800,  700],
+        ['2',     800,  700],
+        ['1',     800,  700],
+        ['Go',   1500, 1000]
+      ];
+      let goTimestamp = null;
+      for (let i = 0; i < cues.length; i++) {
+        const [text, freq, dur] = cues[i];
         beep(freq, dur);
-        const t0 = performance.now();
-        while (performance.now() - t0 < dur) {
-          ctx.fillStyle = 'black';
-          ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-          ctx.fillStyle = 'white';
-          ctx.font = 'bold 80px Arial';
-          const m = ctx.measureText(text);
-          ctx.fillText(text, (canvasElement.width - m.width) / 2, canvasElement.height / 2);
-          await new Promise(r => setTimeout(r, 30));
+        if (text === 'Go') {
+          goTimestamp = performance.now();
         }
+        // draw cue
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 160px Arial';
+        const m = ctx.measureText(text);
+        ctx.fillText(
+          text,
+          (canvasElement.width - m.width) / 2,
+          canvasElement.height / 2
+        );
+        // display for audio duration + 500ms pause
+        const totalDisplay = dur + (i < cues.length - 1 ? 500 : 0);
+        await new Promise(r => setTimeout(r, totalDisplay));
       }
+      return goTimestamp;
     }
 
+    // Angle calculation
     function calculateAngle(a, b, c) {
       const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
       let deg = Math.abs(rad * 180 / Math.PI);
@@ -82,105 +89,98 @@
     function onResults(results) {
       ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       ctx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-      if (results.poseLandmarks) {
-        // Draw pose
-        window.drawConnectors(ctx, results.poseLandmarks, window.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
-        window.drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 1 });
+      if (!results.poseLandmarks) return;
 
-        // Compute hip angle
-        const lm = results.poseLandmarks;
-        const a = lm[11], b = lm[23], c = lm[25];
-        let angle = calculateAngle(a, b, c);
-        angleBuffer.push(angle);
-        if (angleBuffer.length > SMOOTH_WINDOW) angleBuffer.shift();
-        const sorted = angleBuffer.slice().sort((x, y) => x - y);
-        const smooth = sorted[Math.floor(sorted.length / 2)];
+      // Draw skeleton
+      window.drawConnectors(ctx, results.poseLandmarks, window.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+      window.drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 1 });
 
-        // Start calibration after 2s delay
-        if (calibrationRequested && !calibrating && performance.now() - calibrationRequestTime >= 2000) {
-          calibrating = true;
-          calibrationRequested = false;
-          calibBuffer = [];
-          calibrationStart = performance.now();
+      // Compute smoothed hip angle
+      const lm = results.poseLandmarks;
+      const a = lm[11], b = lm[23], c = lm[25];
+      let angle = calculateAngle(a, b, c);
+      angleBuffer.push(angle);
+      if (angleBuffer.length > SMOOTH_WINDOW) angleBuffer.shift();
+      const sorted = [...angleBuffer].sort((x, y) => x - y);
+      const smooth = sorted[Math.floor(sorted.length / 2)];
+
+      // Calibration logic
+      if (calibrationRequested && !calibrating && performance.now() - calibrationRequestTime >= 2000) {
+        calibrating = true;
+        calibrationRequested = false;
+        calibBuffer = [];
+        calibrationStart = performance.now();
+      }
+      if (calibrating) {
+        calibBuffer.push(smooth);
+        const elapsed = performance.now() - calibrationStart;
+        ctx.fillStyle = 'yellow'; ctx.font = '20px Arial';
+        ctx.fillText(`Calibrating ${(elapsed / 1000).toFixed(1)}/3s`, 10, 30);
+        if (elapsed >= CALIB_DURATION) {
+          const med = [...calibBuffer].sort((x, y) => x - y)[Math.floor(calibBuffer.length / 2)];
+          sitThreshold = med + SIT_MARGIN;
+          calibrating = false;
+          calibrated = true;
         }
+      }
 
-        // Calibration
-        if (calibrating) {
-          calibBuffer.push(smooth);
-          const elapsed = performance.now() - calibrationStart;
-          ctx.fillStyle = 'yellow'; ctx.font = '20px Arial';
-          ctx.fillText(`Calibrating ${(elapsed / 1000).toFixed(1)}/3s`, 10, 30);
-          if (elapsed >= CALIB_DURATION) {
-            const med = calibBuffer.slice().sort((x, y) => x - y)[Math.floor(calibBuffer.length / 2)];
-            sitThreshold = med + SIT_MARGIN;
-            calibrating = false;
-            calibrated = true;
-            console.log(`Calibrated sit=${med.toFixed(1)}, thresh=${sitThreshold.toFixed(1)}`);
+      // Rep count logic
+      if (calibrated && !calibrating) {
+        if (smooth > STAND_THRESHOLD && state !== 'stand') {
+          state = 'stand';
+          if (testActive) {
+            repCount++;
+            if (repCount === 1) startTime = performance.now();
+            if (repCount === REP_GOAL) finishPending = true;
+          }
+        } else if (smooth < sitThreshold && state !== 'sit') {
+          state = 'sit';
+          if (finishPending && testActive) {
+            lastResult = (performance.now() - startTime) / 1000;
+            testActive = false;
+            finishPending = false;
           }
         }
+      }
 
-        // Rep counting logic
-        if (calibrated && !calibrating) {
-          if (smooth > STAND_THRESHOLD && state !== 'stand') {
-            state = 'stand';
-            if (testActive) {
-              repCount++;
-              if (repCount === 1) startTime = performance.now();
-              if (repCount === REP_GOAL) finishPending = true;
-            }
-          } else if (smooth < sitThreshold && state !== 'sit') {
-            state = 'sit';
-            if (finishPending && testActive) {
-              const totalSec = (performance.now() - startTime) / 1000;
-              lastResult = totalSec;
-              testActive = false;
-              finishPending = false;
-              console.log(`Done in ${totalSec.toFixed(2)}s`);
-            }
-          }
-        }
-
-        // Display live angle
-        ctx.fillStyle = 'white'; ctx.font = '30px Arial';
-        ctx.fillText(`${smooth.toFixed(0)}°`, b.x * canvasElement.width, b.y * canvasElement.height);
-
-        // Display thresholds and UI
-        if (calibrated) {
-          ctx.fillStyle = 'lightgray'; ctx.font = '18px Arial';
-          ctx.fillText(`SIT_THRESH: ${sitThreshold.toFixed(1)}°`, 10, 550);
-        }
-        if (!calibrated) {
-          const msg = calibrationRequested ? 'Calibrating in 2s' : "Press 'C' to calibrate";
-          ctx.fillStyle = 'white'; ctx.font = '18px Arial';
-          ctx.fillText(msg, 10, 580);
-        } else {
-          ctx.fillStyle = 'white'; ctx.font = '18px Arial';
-          ctx.fillText("Press 'S' to start", 10, 580);
-          ctx.fillText(`Reps: ${repCount}/${REP_GOAL}`, 200, 580);
-          if (testActive) ctx.fillText('Test ACTIVE', 350, 580);
-        }
-
-        // Display last result
-        if (lastResult !== null) {
-          ctx.fillStyle = 'cyan'; ctx.font = '24px Arial';
-          ctx.fillText(`Last Time: ${lastResult.toFixed(2)} s`, 450, 580);
-        }
+      // Overlay: live angle
+      ctx.fillStyle = 'white'; ctx.font = '30px Arial';
+      ctx.fillText(`${smooth.toFixed(0)}°`, b.x * canvasElement.width, b.y * canvasElement.height);
+      // Threshold
+      if (calibrated) {
+        ctx.fillStyle = 'lightgray'; ctx.font = '18px Arial';
+        ctx.fillText(`SIT_THRESH: ${sitThreshold.toFixed(1)}°`, 10, 550);
+      }
+      // UI prompts
+      ctx.fillStyle = 'white'; ctx.font = '18px Arial';
+      if (!calibrated) {
+        const msg = calibrationRequested ? 'Calibrating in 2s' : "Press 'C' to calibrate";
+        ctx.fillText(msg, 10, 580);
+      } else {
+        ctx.fillText("Press 'S' to start", 10, 580);
+        ctx.fillText(`Reps: ${repCount}/${REP_GOAL}`, 200, 580);
+        if (testActive) ctx.fillText('Test ACTIVE', 350, 580);
+      }
+      // Last result
+      if (lastResult !== null) {
+        ctx.fillStyle = 'cyan'; ctx.font = '24px Arial';
+        ctx.fillText(`Performance Time: ${lastResult.toFixed(2)} s`, 450, 580);
       }
     }
 
-    // Initialize pose
+    // Initialize MediaPipe Pose
     const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false });
+    pose.setOptions({ modelComplexity:1, smoothLandmarks:true, enableSegmentation:false });
     pose.onResults(onResults);
 
     // Start camera
     async function startCamera() {
-      const camera = new Camera(videoElement, { onFrame: async () => { await pose.send({ image: videoElement }); }, width: 800, height: 600 });
+      const camera = new Camera(videoElement, { onFrame: async () => await pose.send({ image: videoElement }), width: 800, height: 600 });
       await camera.start();
     }
     startCamera();
 
-    // Key handling
+    // Keyboard controls
     window.addEventListener('keydown', e => {
       if (e.key === 'c' && !calibrating && !calibrationRequested) {
         calibrationRequested = true;
@@ -188,15 +188,15 @@
         repCount = 0;
         testActive = false;
         lastResult = null;
-        console.log('Calibration will start in 2s');
       }
       if (e.key === 's' && calibrated && !testActive) {
-        playCountdown().then(() => {
+        playCountdown().then(goTimestamp => {
           testActive = true;
           repCount = 0;
           finishPending = false;
           lastResult = null;
-          console.log('Test started');
+          // Start timing as soon as "Go" begins
+          startTime = goTimestamp;
         });
       }
     });
