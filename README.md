@@ -34,12 +34,12 @@ A cross‑platform sit‑to‑stand (5×STS) test application using MediaPipe an
 ```
 /               # root
 ├── README.md    # this file
-├── python/      # Python desktop version
+├── index.html   # HTML file for running in the web browser
+├── Python/      # Python desktop version
 │   ├── sit_to_stand.py
 │   ├── list_cameras.py
-│   └── requirements.txt
 └── html/        # Browser version
-    ├── index.html
+    ├── 5TSTS.html
     └── assets/  # optional styles or scripts
 ```
 
