@@ -137,12 +137,15 @@ pip install -r requirements.txt
 
 ## License
 
-This project is open‑source under the MIT License.
+
+Copyright (c) 2025 Bokkyu Kim
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, copy, modify, and distribute the Software for **non-commercial purposes only**. Commercial sale or distribution of the Software, in whole or in part, is strictly prohibited without prior written permission.
+
 
 ---
 
 ## Acknowledgments
-
 * [MediaPipe](https://mediapipe.dev) — Pose & Holistic tracking
 * [OpenCV](https://opencv.org) — Real‑time computer vision
 * Web Audio API & WebRTC for the browser version
