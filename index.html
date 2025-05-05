@@ -5,11 +5,17 @@
   <title>5×STS Test</title>
   <style>
     body { margin:0; display:flex; flex-direction:column; align-items:center; background:#000; color:#fff; }
+    #controls { margin: 10px; }
+    #controls button { font-size: 16px; padding: 8px 16px; margin-right: 10px; }
     #output { width: 800px; height: 600px; }
     canvas { position: relative; }
   </style>
 </head>
 <body>
+  <div id="controls">
+    <button id="calibrateBtn">Calibrate</button>
+    <button id="startBtn">Start Test</button>
+  </div>
   <video id="video" playsinline style="display:none;"></video>
   <canvas id="output" width="800" height="600"></canvas>
 
@@ -45,7 +51,7 @@
       setTimeout(() => o.stop(), dur);
     }
 
-    // Countdown: draw once per cue, match display duration to audio, 500ms inter-cue pause
+    // Countdown
     async function playCountdown() {
       const cues = [
         ['Ready', 1000, 1000],
@@ -58,28 +64,17 @@
       for (let i = 0; i < cues.length; i++) {
         const [text, freq, dur] = cues[i];
         beep(freq, dur);
-        if (text === 'Go') {
-          goTimestamp = performance.now();
-        }
-        // draw cue
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 160px Arial';
+        if (text === 'Go') goTimestamp = performance.now();
+        ctx.fillStyle = 'black'; ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+        ctx.fillStyle = 'white'; ctx.font = 'bold 160px Arial';
         const m = ctx.measureText(text);
-        ctx.fillText(
-          text,
-          (canvasElement.width - m.width) / 2,
-          canvasElement.height / 2
-        );
-        // display for audio duration + 500ms pause
+        ctx.fillText(text, (canvasElement.width - m.width) / 2, canvasElement.height / 2);
         const totalDisplay = dur + (i < cues.length - 1 ? 500 : 0);
         await new Promise(r => setTimeout(r, totalDisplay));
       }
       return goTimestamp;
     }
 
-    // Angle calculation
     function calculateAngle(a, b, c) {
       const rad = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
       let deg = Math.abs(rad * 180 / Math.PI);
@@ -91,11 +86,9 @@
       ctx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
       if (!results.poseLandmarks) return;
 
-      // Draw skeleton
       window.drawConnectors(ctx, results.poseLandmarks, window.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
       window.drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 1 });
 
-      // Compute smoothed hip angle
       const lm = results.poseLandmarks;
       const a = lm[11], b = lm[23], c = lm[25];
       let angle = calculateAngle(a, b, c);
@@ -104,7 +97,6 @@
       const sorted = [...angleBuffer].sort((x, y) => x - y);
       const smooth = sorted[Math.floor(sorted.length / 2)];
 
-      // Calibration logic
       if (calibrationRequested && !calibrating && performance.now() - calibrationRequestTime >= 2000) {
         calibrating = true;
         calibrationRequested = false;
@@ -124,7 +116,6 @@
         }
       }
 
-      // Rep count logic
       if (calibrated && !calibrating) {
         if (smooth > STAND_THRESHOLD && state !== 'stand') {
           state = 'stand';
@@ -143,62 +134,63 @@
         }
       }
 
-      // Overlay: live angle
       ctx.fillStyle = 'white'; ctx.font = '30px Arial';
       ctx.fillText(`${smooth.toFixed(0)}°`, b.x * canvasElement.width, b.y * canvasElement.height);
-      // Threshold
       if (calibrated) {
         ctx.fillStyle = 'lightgray'; ctx.font = '18px Arial';
         ctx.fillText(`SIT_THRESH: ${sitThreshold.toFixed(1)}°`, 10, 550);
       }
-      // UI prompts
       ctx.fillStyle = 'white'; ctx.font = '18px Arial';
       if (!calibrated) {
-        const msg = calibrationRequested ? 'Calibrating in 2s' : "Press 'C' to calibrate";
+        const msg = calibrationRequested ? 'Calibrating in 2s' : "Tap 'Calibrate'";
         ctx.fillText(msg, 10, 580);
       } else {
-        ctx.fillText("Press 'S' to start", 10, 580);
+        const msgStart = testActive ? 'Test ACTIVE' : "Tap 'Start Test'";
         ctx.fillText(`Reps: ${repCount}/${REP_GOAL}`, 200, 580);
-        if (testActive) ctx.fillText('Test ACTIVE', 350, 580);
+        ctx.fillText(msgStart, 10, 580);
       }
-      // Last result
       if (lastResult !== null) {
         ctx.fillStyle = 'cyan'; ctx.font = '24px Arial';
         ctx.fillText(`Performance Time: ${lastResult.toFixed(2)} s`, 450, 580);
       }
     }
 
-    // Initialize MediaPipe Pose
     const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
     pose.setOptions({ modelComplexity:1, smoothLandmarks:true, enableSegmentation:false });
     pose.onResults(onResults);
 
-    // Start camera
     async function startCamera() {
       const camera = new Camera(videoElement, { onFrame: async () => await pose.send({ image: videoElement }), width: 800, height: 600 });
       await camera.start();
     }
     startCamera();
 
-    // Keyboard controls
-    window.addEventListener('keydown', e => {
-      if (e.key === 'c' && !calibrating && !calibrationRequested) {
+    // Button controls
+    document.getElementById('calibrateBtn').addEventListener('click', () => {
+      if (!calibrating && !calibrationRequested) {
         calibrationRequested = true;
         calibrationRequestTime = performance.now();
         repCount = 0;
         testActive = false;
         lastResult = null;
       }
-      if (e.key === 's' && calibrated && !testActive) {
+    });
+    document.getElementById('startBtn').addEventListener('click', () => {
+      if (calibrated && !testActive) {
         playCountdown().then(goTimestamp => {
           testActive = true;
           repCount = 0;
           finishPending = false;
           lastResult = null;
-          // Start timing as soon as "Go" begins
           startTime = goTimestamp;
         });
       }
+    });
+
+    // Keyboard fallback
+    window.addEventListener('keydown', e => {
+      if (e.key === 'c') document.getElementById('calibrateBtn').click();
+      if (e.key === 's') document.getElementById('startBtn').click();
     });
   </script>
 </body>
